@@ -23,14 +23,77 @@
 
 Для генерации интерактивной схемы используется скрипт на Python (`visualize.py`). Он наглядно демонстрирует разницу между реальной топологией сети и тем, как её видит дезинформированный атакующий.
 
-### Скрипт визуализации
+## 📊 2. Топология графа: Реальность vs Обман
 
+Для генерации интерактивной схемы используется скрипт на Python (`visualize.py`). Он наглядно демонстрирует разницу между реальной топологией сети и тем, как её видит дезинформированный атакующий.
+
+### Скрипт визуализации
 ```python
 import matplotlib.pyplot as plt
 import networkx as nx
-# ... (здесь ваш код для matplotlib и networkx) ...
+
+# Инициализируем подложку для двух графиков
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+# --- Левая панель: Реальный граф сети (Взгляд защитника) ---
+G_true = nx.DiGraph()
+G_true.add_edges_from([
+    ('Start', 'Web Server'), 
+    ('Web Server', 'DB (Real)'), 
+    ('Web Server', 'Honeypot')
+])
+
+pos = {
+    'Start': (0, 1), 
+    'Web Server': (1, 1), 
+    'DB (Real)': (2, 1.6), 
+    'Honeypot': (2, 0.4)
+}
+
+# Отрисовка узлов
+nx.draw_networkx_nodes(G_true, pos, nodelist=['Start', 'Web Server'], node_color='#a0cbe2', node_size=2000, ax=ax1)
+nx.draw_networkx_nodes(G_true, pos, nodelist=['DB (Real)'], node_color='#8cd17d', node_size=2000, ax=ax1)
+nx.draw_networkx_nodes(G_true, pos, nodelist=['Honeypot'], node_color='#ff9d9a', node_size=2000, ax=ax1)
+
+# Отрисовка ребер (путь к реальной БД пунктирный - он скрыт)
+nx.draw_networkx_edges(G_true, pos, edgelist=[('Start', 'Web Server')], edge_color='gray', width=2, arrowsize=20, ax=ax1)
+nx.draw_networkx_edges(G_true, pos, edgelist=[('Web Server', 'DB (Real)')], edge_color='#499894', style='dashed', width=2, arrowsize=20, ax=ax1)
+nx.draw_networkx_edges(G_true, pos, edgelist=[('Web Server', 'Honeypot')], edge_color='#e15759', width=2, arrowsize=20, ax=ax1)
+
+nx.draw_networkx_labels(G_true, pos, font_size=10, font_weight='bold', ax=ax1)
+ax1.set_title("Реальный граф (Защитник)\n[Путь к DB скрыт маскировкой]", fontsize=12, fontweight='bold', pad=15)
+ax1.axis('off')
+
+# --- Правая панель: Искаженный граф (Взгляд атакующего-новичка) ---
+G_perceived = nx.DiGraph()
+G_perceived.add_edges_from([
+    ('Start', 'Web Server'), 
+    ('Web Server', 'Honeypot')
+])
+
+# Отрисовка узлов (ловушка выделена золотым цветом как сверхценная)
+nx.draw_networkx_nodes(G_perceived, pos, nodelist=['Start', 'Web Server'], node_color='#a0cbe2', node_size=2000, ax=ax2)
+nx.draw_networkx_nodes(G_perceived, pos, nodelist=['Honeypot'], node_color='#f28e2b', node_size=2400, ax=ax2)
+
+# Отрисовка ребер
+nx.draw_networkx_edges(G_perceived, pos, edgelist=[('Start', 'Web Server')], edge_color='gray', width=2, arrowsize=20, ax=ax2)
+nx.draw_networkx_edges(G_perceived, pos, edgelist=[('Web Server', 'Honeypot')], edge_color='#f28e2b', width=3, arrowsize=20, ax=ax2)
+
+# Корректируем метку для отображения ценности ловушки в глазах хакера
+labels_perceived = {'Start': 'Start', 'Web Server': 'Web Server', 'Honeypot': 'Honeypot\n(⭐ Сверхценно!)'}
+nx.draw_networkx_labels(G_perceived, pos, labels=labels_perceived, font_size=9, font_weight='bold', ax=ax2)
+ax2.set_title("Искаженный граф (Атакующий)\n[Видит только фейковый путь-приманку]", fontsize=12, fontweight='bold', pad=15)
+ax2.axis('off')
+
+plt.tight_layout()
 plt.savefig("attack_graph_deception.png", dpi=300)
+plt.show()
 ```
+
+Запустив этот скрипт, вы получите файл `attack_graph_deception.png`, который можно вставить в описание репозитория:
+
+![Топология графа атак](attack_graph_deception.png)
+
 
 Запустив этот скрипт, вы получите файл `attack_graph_deception.png`, который нужно загрузить в этот же репозиторий, чтобы заработала ссылка ниже:
 
