@@ -25,7 +25,7 @@
 Для генерации интерактивной схемы используется скрипт на Python (`visualize.py`). Он наглядно демонстрирует разницу между реальной топологией сети и тем, как её видит дезинформированный атакующий.
 
 ### Скрипт визуализации
-"""python
+'''python
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -85,16 +85,12 @@ ax2.axis('off')
 plt.tight_layout()
 plt.savefig("attack_graph_deception.png", dpi=300)
 plt.show()
-"""
+'''
 
 Запустив этот скрипт, вы получите файл `attack_graph_deception.png`, который можно вставить в описание репозитория:
 
 ![Топология графа атак](attack_graph_deception.png)
 
-
-Запустив этот скрипт, вы получите файл `attack_graph_deception.png`, который нужно загрузить в этот же репозиторий, чтобы заработала ссылка ниже:
-
-![Топология графа атак](attack_graph_deception.png)
 
 
 
@@ -104,13 +100,13 @@ plt.show()
 
 ### Зависимости
 Для запуска проекта вам понадобятся:
-"""bash
+'''bash
 pip install networkx matplotlib
-"""
+'''
 
 ### Код симуляции (`simulation.py`)
 
-"""python
+'''python
 import networkx as nx
 
 class DeceptionGame:
@@ -194,7 +190,7 @@ if __name__ == "__main__":
     
     # Исход 2: Атакующий-Профи обходит обман
     game.simulate_attacker("high_skill")
-"""
+'''
 
 
 
