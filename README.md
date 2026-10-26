@@ -46,20 +46,104 @@ plt.savefig("attack_graph_deception.png", dpi=300)
 pip install networkx matplotlib
 ```
 
-### Код симуляции (`simulation.py`)
+## 💻 3. Симуляция на Python
 
+Скрипт ниже моделирует принятие решений атакующими двух типов: **Новичок (Low-skill)** и **Профи (High-skill)** в условиях, когда защитник применил стратегии маскировки и создания ложных целей.
+
+### Зависимости
+Для запуска проекта вам понадобятся:
+```bash
+pip install networkx matplotlib
+```
+
+### Код симуляции (`simulation.py`)
 
 ```python
 import networkx as nx
 
 class DeceptionGame:
     def __init__(self):
-        # ... (весь ваш класс DeceptionGame и метод simulate_attacker) ...
+        # Реальная ценность серверов для ИБ-инфраструктуры
+        self.real_payoffs = {
+            'DB_Real': 100,      # Главная критическая цель
+            'Honeypot': 0        # Ловушка-пустышка
+        }
+        
+        # Стоимость прохода по ребрам (затраты атакующего на эксплойты)
+        self.edge_costs = {
+            ('Start', 'Web'): 10,
+            ('Web', 'DB_Real'): 40,
+            ('Web', 'Honeypot'): 15
+        }
 
+    def simulate_attacker(self, attacker_type):
+        """
+        Моделирование логики атакующего согласно его типу (навыкам разведки)
+        """
+        print(f"\n=== Анализ поведения атакующего: [{attacker_type.upper()}] ===")
+        
+        # Защитник скрывает реальный путь и завышает ценность Honeypot
+        perceived_payoffs = self.real_payoffs.copy()
+        
+        if attacker_type == "low_skill":
+            # Новичок верит маскировке: не видит реальную DB и думает, что Honeypot ценен
+            visible_edges = [('Start', 'Web'), ('Web', 'Honeypot')]
+            perceived_payoffs['Honeypot'] = 120  # Обман сработал: ложная цель кажется сверхценной
+        
+        elif attacker_type == "high_skill":
+            # Профи частично распознает обман благодаря разведке (сканированию)
+            visible_edges = [('Start', 'Web'), ('Web', 'DB_Real'), ('Web', 'Honeypot')]
+            perceived_payoffs['Honeypot'] = 10   # Распознал ловушку, снизил приоритет
+            
+        else:
+            raise ValueError("Неизвестный тип атакующего")
+
+        # Строим индивидуальный "видимый" граф для текущего злоумышленника
+        G_perceived = nx.DiGraph()
+        G_perceived.add_edges_from(visible_edges)
+
+        best_path = None
+        max_utility = -float('inf')
+
+        # Выбираем целевые узлы, которые видит атакующий
+        targets = [node for node in perceived_payoffs if node in G_perceived.nodes and node not in ['Start', 'Web']]
+        
+        for target in targets:
+            if nx.has_path(G_perceived, 'Start', target):
+                path = nx.shortest_path(G_perceived, 'Start', target)
+                
+                # Считаем затраты на путь
+                path_cost = 0
+                for i in range(len(path) - 1):
+                    path_cost += self.edge_costs.get((path[i], path[i+1]), 0)
+                
+                # Выгода = Воспринимаемая ценность - Затраты
+                utility = perceived_payoffs[target] - path_cost
+                
+                if utility > max_utility:
+                    max_utility = utility
+                    best_path = path
+
+        # Фиксация реального исхода для защитника
+        final_node = best_path[-1] if best_path else None
+        actual_damage = self.real_payoffs.get(final_node, 0)
+        
+        print(f"Выбранный путь атаки: {' -> '.join(best_path)}")
+        print(f"Ожидаемая выгода злоумышленника: {max_utility}")
+        print(f"Реальный ущерб для системы защитника: {actual_damage} (Успех децепции: {actual_damage == 0})")
+        return actual_damage
+
+# Запуск симуляции игры Стекльберга
 if __name__ == "__main__":
     game = DeceptionGame()
+    
+    # Исход 1: Атакующий-Новичок попадает в ловушку
     game.simulate_attacker("low_skill")
+    
+    # Исход 2: Атакующий-Профи обходит обман
     game.simulate_attacker("high_skill")
+```
+
 ```
 
 ## 📈 4. Ключевые выводы проекта
