@@ -199,6 +199,120 @@ if __name__ == "__main__":
 1. **Эффективность децепции:** Против низкоквалифицированных нарушителей (`low_skill`) обманные технологии (кибер-децепция) снижают ущерб до нуля, успешно уводя их на Honeypots и заставляя тратить ресурсы впустую.
 2. **Ограничения:** Против продвинутых хакеров (`high_skill`) одного обмана мало. Необходимы гибридные стратегии: сочетание децепции с традиционными методами защиты (распределение файрволов, патчинг уязвимостей, классические игры Стекльберга).
 3. **Научная ценность:** Данный подход переводит кибербезопасность из реактивного состояния («отражаем атаки по факту») в проактивное («управляем поведением и приоритетами атакующего через контролируемую дезинформацию»).
+## 🧮 5. Математическая MILP-оптимизация (Решение игры Стекльберга)
+
+Для поиска точного оптимального решения (Strong Stackelberg Equilibrium) на слоистых графах в условиях обмана используется аппарат **смешанно-целочисленного линейного программирования (MILP)**. 
+
+### Суть математической задачи:
+Защитник вводит бинарные переменные для манипуляции ребрами:
+* \(h_e \in \{0, 1\}\) — скрыть ли реальное ребро \(e\) (1 — скрыть, 0 — оставить).
+* \(f_e \in \{0, 1\}\) — добавить ли ложное ребро-приманку \(e\) (1 — добавить, 0 — не добавлять).
+
+Злоумышленник типа \(\theta\) выбирает поток по ребрам графа для максимизации своей чистой выгоды (Utility), учитывая ограничения видимости, наложенные действиями защитника.
+
+### Зависимости для MILP
+Для запуска математического решателя необходимо установить библиотеку `pulp`:
+```bash
+pip install pulp
+```
+
+### Код MILP-оптимизации (`milp_solver.py`)
+```python
+import pulp
+
+def solve_deception_milp():
+    # Инициализируем задачу минимизации ущерба для Защитника
+    prob = pulp.LpProblem("Attack_Graph_Deception_MILP", pulp.LpMinimize)
+
+    # Множество ключевых узлов
+    nodes = ['Start', 'Web', 'DB_Real', 'Honeypot']
+    
+    # Реальная ценность целей (ущерб для защитника при компрометации)
+    target_damage = {'DB_Real': 100, 'Honeypot': 0}
+    
+    # Стоимость прохода по ребрам для атакующего
+    edge_costs = {
+        ('Start', 'Web'): 10,
+        ('Web', 'DB_Real'): 40,
+        ('Web', 'Honeypot'): 15
+    }
+
+    # ВЕРОЯТНОСТИ типов атакующих: p(low_skill) = 0.7, p(high_skill) = 0.3
+    attacker_probs = {'low_skill': 0.7, 'high_skill': 0.3}
+
+    # --- ПЕРЕМЕННЫЕ РЕШЕНИЯ ЗАЩИТНИКА ---
+    # Бюджет на обманные действия (максимум 2 действия)
+    BUDGET = 2
+    
+    # b_hide = 1, если скрываем путь к реальной БД
+    b_hide = pulp.LpVariable("b_hide", cat='Binary')
+    # b_fake = 1, если разворачиваем Honeypot
+    b_fake = pulp.LpVariable("b_fake", cat='Binary')
+
+    # Ограничение на бюджет
+    prob += (b_hide + b_fake <= BUDGET, "Defender_Budget_Constraint")
+
+    # --- ПЕРЕМЕННЫЕ АТАКАУЮЩЕГО И МАКСИМИЗАЦИЯ ПОЛЕЗНОСТИ ---
+    # Для каждого типа атакующего вводим переменные пути (потока) по ребрам
+    attacker_edges = {}
+    for a_type in attacker_probs:
+        for edge in edge_costs:
+            attacker_edges[(a_type, edge)] = pulp.LpVariable(f"flow_{a_type}_{edge[0]}_{edge[1]}", cat='Binary')
+
+    # Переменные для фиксации финальной выбранной цели атакующим
+    reached_target = {}
+    for a_type in attacker_probs:
+        for target in target_damage:
+            reached_target[(a_type, target)] = pulp.LpVariable(f"reach_{a_type}_{target}", cat='Binary')
+
+    # --- ЦЕЛЕВАЯ ФУНКЦИЯ ЗАЩИТНИКА ---
+    # Минимизируем математическое ожидание ущерба по всем типам атакующих
+    expected_damage = pulp.lpSum([
+        attacker_probs[a_type] * reached_target[(a_type, target)] * target_damage[target]
+        for a_type in attacker_probs for target in target_damage
+    ])
+    prob += expected_damage
+
+    # --- ОГРАНИЧЕНИЯ ДЛЯ КАЖДОГО ТИПА АТАКАЮЩЕГО ---
+    for a_type in attacker_probs:
+        # 1. Ограничения сохранения потока (Кирхгофа) для графа атак
+        # Поток выходит из Start
+        prob += pulp.lpSum([attacker_edges[(a_type, ('Start', 'Web'))]]) <= 1
+        
+        # Поток на промежуточном узле Web
+        prob += attacker_edges[(a_type, ('Start', 'Web'))] == (
+            attacker_edges[(a_type, ('Web', 'DB_Real'))] + attacker_edges[(a_type, ('Web', 'Honeypot'))]
+        )
+        
+        # Связь потока с достижением финальных целей
+        prob += attacker_edges[(a_type, ('Web', 'DB_Real'))] == reached_target[(a_type, 'DB_Real')]
+        prob += attacker_edges[(a_type, ('Web', 'Honeypot'))] == reached_target[(a_type, 'Honeypot')]
+
+        # 2. Ограничения видимости (влияние обмана защитника)
+        if a_type == 'low_skill':
+            # Новичок не идет туда, где скрыто: поток <= 1 - b_hide
+            prob += attacker_edges[(a_type, ('Web', 'DB_Real'))] <= (1 - b_hide)
+            # Новичок идет на фейк только если b_fake активирован
+            prob += attacker_edges[(a_type, ('Web', 'Honeypot'))] <= b_fake
+        
+        elif a_type == 'high_skill':
+            # Профи имеет шанс обойти скрытие или проигнорировать приманку (ограничения мягче)
+            prob += attacker_edges[(a_type, ('Web', 'DB_Real'))] <= 1  # сканирование находит уязвимость
+            prob += attacker_edges[(a_type, ('Web', 'Honeypot'))] <= 1
+
+    # Запуск решения задачи
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=False))
+
+    # Вывод результатов оптимизации
+    print(f"Статус решения: {pulp.LpStatus[status]}")
+    print(f"Оптимальная стратегия защиты:")
+    print(f"  - Скрыть реальную БД (b_hide): {int(b_hide.varValue)}")
+    print(f"  - Развернуть приманку (b_fake): {int(b_fake.varValue)}")
+    print(f"Математическое ожидание ущерба системы: {pulp.value(prob.objective)}")
+
+if __name__ == "__main__":
+    solve_deception_milp()
+```
 
 ---
 *Отказ от ответственности: Данный аналитический разбор и программный код подготовлены на основе открытых материалов статьи «Harnessing the Power of Deception in Attack Graph-Based Security Games» (GameSec 2020) исключительно в образовательных целях.*
